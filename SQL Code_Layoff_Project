@@ -1,0 +1,273 @@
+--SQL PROJECT DATA CLEANING---
+/*
+--Dataset--
+
+-- https://www.kaggle.com/datasets/swaptr/layoffs-2022
+
+We are trying to do the cleaning in mainly five ways
+     1. Collect , clean and analyze the data
+    2. Remove duplicate values
+	3. Standadrise the data
+	4. Remove null values
+	5. Exploratory Data analysis
+
+	*/
+Use Project_Portfolio;
+
+--This is the extracted Data set
+select *
+from [dbo].[Lay off data];
+
+--Rename the table name
+EXEC sp_rename '[dbo].[Lay off data]', 'Layoff_data';
+
+--Retrieve the data
+select * from Layoff_data;
+
+--Always have a new table for data cleaning
+
+SELECT TOP 0 *
+INTO Layoff_data_New
+FROM Layoff_data;
+
+--Retrieve the data from new table
+Select * from Layoff_data_New;
+
+--Insert all the data from old to new table
+INSERT Layoff_data_New 
+SELECT *
+FROM Layoff_data;
+
+--Removing the duplicates
+
+select * from Layoff_data_New;
+
+
+--Checking the duplicates in the table
+
+WITH duplicate_CTE AS
+(
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY company, location, industry, total_laid_off, [date], stage, country, funds_raised
+               ORDER BY (SELECT NULL)
+           ) AS row_num
+    FROM Layoff_data_New
+)
+SELECT *
+FROM duplicate_CTE
+WHERE row_num > 1;
+
+--Delete the duplicates
+
+WITH duplicate_CTE AS
+(
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY company, location, industry, total_laid_off, [date], stage, country, funds_raised
+               ORDER BY (SELECT NULL)
+           ) AS row_num
+    FROM Layoff_data_New
+)
+DELETE
+FROM duplicate_CTE
+WHERE row_num > 1;
+
+---Standarizing the data
+
+Select DISTINCT company
+FROM Layoff_data_New;
+
+UPDATE Layoff_data_New
+SET company = TRIM(company);
+
+
+Select DISTINCT industry
+FROM Layoff_data_New
+ORDER BY 1;
+
+
+Select DISTINCT industry
+FROM Layoff_data_New
+WHERE industry LIKE '%CRYPTO%';
+
+UPDATE Layoff_data_New
+SET industry = 'CRYPTO'
+WHERE industry LIKE '%CRYPTO%'
+
+Select DISTINCT industry
+FROM Layoff_data_New;
+
+Select DISTINCT country
+FROM Layoff_data_New
+ORDER BY 1;
+
+Select *
+FROM Layoff_data_New
+WHERE country LIKE '%United States%';
+
+
+Select DISTINCT country , TRIM(TRAILING '.' FROM Country)
+FROM Layoff_data_New
+ORDER BY 1;
+
+UPDATE Layoff_data_New
+SET country = TRIM(TRAILING '.' FROM Country)
+WHERE industry LIKE '%United States%'
+
+
+--Time series / time format series
+
+
+Select *
+from  Layoff_data_New; 
+
+
+SELECT MONTH([date]) 
+FROM  Layoff_data_New;
+
+UPDATE  Layoff_data_New
+SET [date] = MONTH([date]);
+
+
+ALTER TABLE Layoff_data_New
+ALTER COLUMN [date] DATE;
+
+--Handling Null Values
+
+
+Select *
+from  Layoff_data_New
+WHERE total_laid_off IS NULL
+AND percentage_laid_off IS NULL;
+
+Select total_laid_off 
+,CASE total_laid_off WHEN NULL THEN 'not found' ELSE total_laid_off END
+from  Layoff_data_New
+
+SELECT total_laid_off,
+       CASE 
+           WHEN total_laid_off IS NULL THEN 'not found' 
+           ELSE CAST(total_laid_off AS VARCHAR) 
+       END AS total_laid_off_status
+FROM Layoff_data_New;
+
+
+SELECT percentage_laid_off,
+       CASE 
+           WHEN percentage_laid_off IS NULL THEN 'not found' 
+           ELSE CAST(percentage_laid_off AS VARCHAR) 
+       END AS percentage_laid_off_status
+FROM Layoff_data_New;
+
+UPDATE Layoff_data_New
+SET total_laid_off = 0
+WHERE total_laid_off IS NULL;
+
+UPDATE Layoff_data_New
+SET funds_raised= 0
+WHERE funds_raised IS NULL;
+
+
+
+UPDATE Layoff_data_New
+SET percentage_laid_off = 0
+WHERE percentage_laid_off IS NULL;
+
+Select *
+from  Layoff_data_New
+WHERE industry IS NULL ;
+
+select *
+from Layoff_data_New as L1
+JOIN Layoff_data_New as L2
+     on L1.company = L2.company
+WHERE (L1.industry IS NULL OR L1. industry = '')
+AND  L2.company IS NOT NULL
+
+UPDATE Layoff_data_New as L1
+JOIN Layoff_data_New  as L2
+   ON L1.company = L2.company
+SET L1.industry=L2.industry
+WHERE (L1.industry IS NULL OR L1. industry = '')
+AND  L2.company IS NOT NULL
+
+
+
+
+ ---Exploratory Data Analysis
+
+
+
+Select MAX(total_laid_off) ,MAX(percentage_laid_off)
+from  Layoff_data_New
+
+ Select *
+from  Layoff_data_New
+Where percentage_laid_off = 1
+order by total_laid_off desc
+
+Select *
+from  Layoff_data_New
+Where percentage_laid_off = 1
+order by funds_raised desc
+
+ Select company,SUM(total_laid_off) as total_laidoff
+from  Layoff_data_New
+Group by company
+Order by 2 DESC
+
+Select MIN(Date),Max(Date)
+from  Layoff_data_New
+
+Select industry,SUM(total_laid_off) as total_laidoff
+from  Layoff_data_New
+Group by industry
+Order by 2 DESC
+
+Select country,SUM(total_laid_off) as total_laidoff
+from  Layoff_data_New
+Group by country
+Order by 2 DESC
+
+Select YEAR(date),SUM(total_laid_off) as total_laidoff
+from  Layoff_data_New
+Group by YEAR(date)
+Order by 1 DESC
+
+Select stage,SUM(total_laid_off) as total_laidoff
+from  Layoff_data_New
+Group by stage
+Order by 1 DESC
+
+
+Select company, Format(date,'yyyy-MM') as month_day, sum(total_laid_off)
+from Layoff_data_New
+Group by company, Format(date,'yyyy-MM')
+order by company ASC
+
+WITH rolling_total AS (
+  SELECT company, FORMAT(date, 'yyyy-MM') AS month_day, SUM(total_laid_off) AS total_laid_off
+  FROM Layoff_data_New
+  GROUP BY company, FORMAT(date, 'yyyy-MM')
+)
+SELECT month_day, SUM(total_laid_off) OVER (ORDER BY month_day) AS rolling_total
+FROM rolling_total
+ORDER BY month_day ASC;
+
+
+WITH Company_year(company, years, total_laid_off) AS (
+  SELECT company, FORMAT(date, 'yyyy') AS years, SUM(total_laid_off) AS total_laid_off
+  FROM Layoff_data_New
+  GROUP BY company, FORMAT(date, 'yyyy')
+)
+SELECT *,
+  DENSE_RANK() OVER (PARTITION BY years ORDER BY total_laid_off DESC) AS rank
+FROM Company_year
+where years is NOT NULL
+ORDER BY rank ASC;
+
+
+
+
+
